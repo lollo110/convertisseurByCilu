@@ -1,86 +1,92 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Hello ConvertController!{% endblock %}
+{% block title %}Convertisseur de fichiers
+{% endblock %}
 
 {% block body %}
-<h1>Convertisseur de fichiers</h1>
+	<h1>Convertisseur de fichiers</h1>
 
-<form method="post" enctype="multipart/form-data" data-turbo="false" id="convertForm">
-    <div id="dropZone" style="border: 2px dashed #ccc; padding: 20px; text-align: center;">
-        Glissez votre fichier ici ou cliquez pour sélectionner
-        <input type="file" name="file" id="fileInput" style="display:none" required>
-    </div>
-    
-    <div id="preview" style="margin-top:10px;"></div>
+	<form method="post" enctype="multipart/form-data" data-turbo="false" id="convertForm">
+		<div id="dropZone" style="border: 2px dashed #ccc; padding: 20px; text-align: center;">
+			Glissez votre fichier ici ou cliquez pour sélectionner
+			<input type="file" name="file" id="fileInput" style="display:none" required>
+		</div>
 
-    <select name="format" required>
-        <option value="png">PNG</option>
-        <option value="jpg">JPG</option>
-        <option value="webp">WEBP</option>
-    </select>
+		<div id="preview" style="margin-top:10px;"></div>
 
-    <button type="submit">Convertir</button>
-    <div id="error" style="color:red; margin-top:10px;"></div>
-</form>
+		<select name="format" required>
+			<option value="png">PNG (images)</option>
+			<option value="jpg">JPG (images)</option>
+			<option value="webp">WEBP (images)</option>
+			<option value="pdf">PDF (Word → PDF)</option>
+		</select>
 
-<script>
-const dropZone = document.getElementById('dropZone');
+		<button type="submit">Convertir</button>
+		<div id="error" style="color:red; margin-top:10px;"></div>
+	</form>
+
+
+	<script>
+		const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const preview = document.getElementById('preview');
 const errorDiv = document.getElementById('error');
+const formatSelect = document.getElementById('formatSelect');
 
-const MAX_SIZE_MB = 5; // limite 5 Mo
+const MAX_SIZE_MB = 5;
 
 dropZone.addEventListener('click', () => fileInput.click());
-
-dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.style.borderColor = '#333';
+dropZone.addEventListener('dragover', e => {
+e.preventDefault();
+dropZone.style.borderColor = '#333';
 });
-
-dropZone.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    dropZone.style.borderColor = '#ccc';
+dropZone.addEventListener('dragleave', e => {
+e.preventDefault();
+dropZone.style.borderColor = '#ccc';
 });
-
-dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.style.borderColor = '#ccc';
-    const file = e.dataTransfer.files[0];
-    handleFile(file);
+dropZone.addEventListener('drop', e => {
+e.preventDefault();
+dropZone.style.borderColor = '#ccc';
+handleFile(e.dataTransfer.files[0]);
 });
-
-fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    handleFile(file);
-});
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
 
 function handleFile(file) {
-    errorDiv.textContent = '';
-    preview.innerHTML = '';
+errorDiv.textContent = '';
+preview.innerHTML = '';
 
-    if (!file) return;
+if (! file) 
+return;
 
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-        errorDiv.textContent = `Fichier trop gros. Max ${MAX_SIZE_MB} Mo.`;
-        fileInput.value = '';
-        return;
-    }
 
-    if (!file.type.startsWith('image/')) {
-        errorDiv.textContent = 'Format non supporté, utilisez une image JPG, PNG ou WEBP.';
-        fileInput.value = '';
-        return;
-    }
-
-    // Afficher aperçu
-    const img = document.createElement('img');
-    img.src = URL.createObjectURL(file);
-    img.style.maxWidth = '200px';
-    img.style.maxHeight = '200px';
-    preview.appendChild(img);
-
-    fileInput.files = e ? e.dataTransfer?.files || fileInput.files : fileInput.files;
+if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+errorDiv.textContent = `Fichier trop gros. Max ${MAX_SIZE_MB} Mo.`;
+fileInput.value = '';
+return;
 }
-</script>
+
+const imageTypes = ['image/jpeg', 'image/png', 'image/webp'];
+const docTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+
+if (! imageTypes.includes(file.type) && ! docTypes.includes(file.type)) {
+errorDiv.textContent = 'Format non supporté. Images: JPG, PNG, WEBP. Documents: PDF, Word.';
+fileInput.value = '';
+return;
+}
+
+// Aperçu uniquement pour images
+if (file.type.startsWith('image/')) {
+const img = document.createElement('img');
+img.src = URL.createObjectURL(file);
+img.style.maxWidth = '200px';
+img.style.maxHeight = '200px';
+preview.appendChild(img);
+}
+
+// Mettre le fichier dans l'input
+const dataTransfer = new DataTransfer();
+dataTransfer.items.add(file);
+fileInput.files = dataTransfer.files;
+}
+	</script>
 {% endblock %}

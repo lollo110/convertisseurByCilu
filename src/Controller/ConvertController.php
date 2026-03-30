@@ -13,54 +13,106 @@ class ConvertController extends AbstractController
     public function index(Request $request): Response
     {
         if ($request->isMethod('POST')) {
-    $file = $request->files->get('file');
-    $format = $request->request->get('format');
+            $file = $request->files->get('file');
+            $format = $request->request->get('format');
 
-    if (!$file) {
-        return new Response("Aucun fichier reçu", 400);
-    }
+            if (!$file) {
+                return new Response("Aucun fichier reçu", 400);
+            }
 
-    // Vérifier la taille (5 Mo max)
-    $maxSize = 5 * 1024 * 1024;
-    if ($file->getSize() > $maxSize) {
-        return new Response("Fichier trop gros. Max 5 Mo.", 400);
-    }
+            $originalPath = $file->getPathname();
+            $mime = $file->getMimeType();
 
-    // Vérifier type MIME
-    $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!in_array($file->getMimeType(), $allowedMimes)) {
-        return new Response("Format non supporté. Utilisez JPG, PNG ou WEBP.", 400);
-    }
+            // ------------------------
+            // 🖼️ IMAGES
+            // ------------------------
+            $imageMimes = ['image/jpeg', 'image/png', 'image/webp'];
 
-    $originalPath = $file->getPathname();
+            if (in_array($mime, $imageMimes)) {
+                $image = null;
 
-    // Charger l'image selon son type
-    $mime = $file->getMimeType();
-    $image = null;
-    if ($mime === 'image/jpeg') $image = imagecreatefromjpeg($originalPath);
-    if ($mime === 'image/png')  $image = imagecreatefrompng($originalPath);
-    if ($mime === 'image/webp') $image = imagecreatefromwebp($originalPath);
+                if ($mime === 'image/jpeg')
+                    $image = imagecreatefromjpeg($originalPath);
+                if ($mime === 'image/png')
+                    $image = imagecreatefrompng($originalPath);
+                if ($mime === 'image/webp')
+                    $image = imagecreatefromwebp($originalPath);
 
-    if (!$image) {
-        return new Response("Impossible de traiter l'image.", 400);
-    }
+                if (!$image) {
+                    return new Response("Erreur lecture image", 400);
+                }
 
-    // Fichier temporaire
-    $tempFile = sys_get_temp_dir() . '/converted_' . uniqid() . '.' . $format;
+                $tempFile = sys_get_temp_dir() . '\\converted_' . uniqid() . '.' . $format;
 
-    // Conversion
-    switch ($format) {
-        case 'png':  imagepng($image, $tempFile); break;
-        case 'jpg':  imagejpeg($image, $tempFile); break;
-        case 'webp': imagewebp($image, $tempFile); break;
-        default: return new Response("Format cible inconnu.", 400);
-    }
+                switch ($format) {
+                    case 'png':
+                        imagepng($image, $tempFile);
+                        break;
+                    case 'jpg':
+                        imagejpeg($image, $tempFile);
+                        break;
+                    case 'webp':
+                        imagewebp($image, $tempFile);
+                        break;
+                    default:
+                        return new Response("Format image invalide", 400);
+                }
 
-    imagedestroy($image);
+                imagedestroy($image);
 
-    // Envoyer le fichier
-    return $this->file($tempFile, 'converted.' . $format);
-}
+                return $this->file($tempFile, 'converted.' . $format);
+            }
+
+            // ------------------------
+// 📄 WORD -> PDF (FIABLE)
+// ------------------------
+
+            $wordMimes = [
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ];
+
+            if (in_array($mime, $wordMimes)) {
+
+                if ($format !== 'pdf') {
+                    return new Response("Seule conversion Word → PDF autorisée", 400);
+                }
+
+                // ✅ Sauvegarder avec vraie extension
+                $extension = $file->getClientOriginalExtension(); // doc ou docx
+                $filename = uniqid() . '.' . $extension;
+                $file->move(sys_get_temp_dir(), $filename);
+
+                $inputPath = sys_get_temp_dir() . '\\' . $filename;
+                $outputDir = sys_get_temp_dir();
+
+                // ⚠️ Chemin LibreOffice
+                $soffice = "C:\\Program Files\\LibreOffice\\program\\soffice.exe";
+
+                $cmd = sprintf(
+                    '%s --headless --convert-to pdf --outdir %s %s 2>&1',
+                    escapeshellarg($soffice),
+                    escapeshellarg($outputDir),
+                    escapeshellarg($inputPath)
+                );
+
+                exec($cmd, $output, $returnVar);
+
+                if ($returnVar !== 0) {
+                    return new Response("Erreur conversion:\n" . implode("\n", $output), 500);
+                }
+
+                $outputFile = $outputDir . '\\' . pathinfo($filename, PATHINFO_FILENAME) . '.pdf';
+
+                if (!file_exists($outputFile)) {
+                    return new Response("Fichier PDF non généré", 500);
+                }
+
+                return $this->file($outputFile, 'converted.pdf');
+            }
+
+            return new Response("Type de fichier non supporté", 400);
+        }
 
         return $this->render('convert/index.html.twig');
     }
