@@ -19,6 +19,10 @@
 			<option value="jpg">JPG (images)</option>
 			<option value="webp">WEBP (images)</option>
 			<option value="pdf">PDF (Word → PDF)</option>
+            <option value="mp4">MP4 (vidéo)</option>
+<option value="avi">AVI (vidéo)</option>
+<option value="mkv">MKV (vidéo)</option>
+<option value="webm">WEBM (vidéo)</option>
 		</select>
 
 		<button type="submit">Convertir</button>
@@ -33,7 +37,7 @@ const preview = document.getElementById('preview');
 const errorDiv = document.getElementById('error');
 const formatSelect = document.getElementById('formatSelect');
 
-const MAX_SIZE_MB = 5;
+const MAX_SIZE_MB = 500;
 
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => {
@@ -52,41 +56,66 @@ handleFile(e.dataTransfer.files[0]);
 fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
 
 function handleFile(file) {
-errorDiv.textContent = '';
-preview.innerHTML = '';
+    errorDiv.textContent = '';
+    preview.innerHTML = '';
 
-if (! file) 
-return;
+    if (!file) return;
 
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+        errorDiv.textContent = `Fichier trop gros. Max ${MAX_SIZE_MB} Mo.`;
+        fileInput.value = '';
+        return;
+    }
 
-if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-errorDiv.textContent = `Fichier trop gros. Max ${MAX_SIZE_MB} Mo.`;
-fileInput.value = '';
-return;
-}
+    const imageTypes = ['image/jpeg','image/png','image/webp'];
+    const docTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    const videoTypes = [
+        'video/mp4',
+        'video/x-msvideo', // avi
+        'video/quicktime', // mov
+        'video/x-matroska', // mkv
+        'video/webm'
+    ];
 
-const imageTypes = ['image/jpeg', 'image/png', 'image/webp'];
-const docTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!imageTypes.includes(file.type) &&
+        !docTypes.includes(file.type) &&
+        !videoTypes.includes(file.type)) {
+        errorDiv.textContent = 'Format non supporté. Images, PDF, Word, Vidéos autorisés.';
+        fileInput.value = '';
+        return;
+    }
 
-if (! imageTypes.includes(file.type) && ! docTypes.includes(file.type)) {
-errorDiv.textContent = 'Format non supporté. Images: JPG, PNG, WEBP. Documents: PDF, Word.';
-fileInput.value = '';
-return;
-}
+    // Création d'un div pour afficher le nom du fichier
+    const fileNameDiv = document.createElement('div');
+    fileNameDiv.textContent = `Fichier : ${file.name}`;
+    fileNameDiv.style.marginTop = '5px';
 
-// Aperçu uniquement pour images
-if (file.type.startsWith('image/')) {
-const img = document.createElement('img');
-img.src = URL.createObjectURL(file);
-img.style.maxWidth = '200px';
-img.style.maxHeight = '200px';
-preview.appendChild(img);
-}
+    // Aperçu uniquement pour images
+    if (imageTypes.includes(file.type)) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.style.maxWidth = '200px';
+        img.style.maxHeight = '200px';
+        preview.appendChild(img);
+        preview.appendChild(fileNameDiv); // nom du fichier sous l'image
+    } else {
+        // Pour documents et vidéos, seulement le nom
+        preview.appendChild(fileNameDiv);
+    }
 
-// Mettre le fichier dans l'input
-const dataTransfer = new DataTransfer();
-dataTransfer.items.add(file);
-fileInput.files = dataTransfer.files;
+    // Message pour vidéo si tu veux
+    if (videoTypes.includes(file.type)) {
+        errorDiv.textContent = 'Vidéo détectée ✔';
+    }
+
+    // Mettre le fichier dans l'input
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    fileInput.files = dataTransfer.files;
 }
 	</script>
 {% endblock %}

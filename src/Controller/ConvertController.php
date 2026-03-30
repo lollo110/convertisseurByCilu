@@ -111,6 +111,52 @@ class ConvertController extends AbstractController
                 return $this->file($outputFile, 'converted.pdf');
             }
 
+            // ------------------------
+// 🎬 VIDEO -> VIDEO
+// ------------------------
+
+$videoMimes = [
+    'video/mp4',
+    'video/x-msvideo', // avi
+    'video/quicktime', // mov
+    'video/x-matroska', // mkv
+    'video/webm'
+];
+
+if (in_array($mime, $videoMimes)) {
+
+    if (!in_array($format, ['mp4', 'avi', 'mkv', 'webm'])) {
+        return new Response("Format vidéo invalide", 400);
+    }
+
+    // Sauvegarder avec extension
+    $extension = $file->getClientOriginalExtension();
+    $filename = uniqid() . '.' . $extension;
+    $file->move(sys_get_temp_dir(), $filename);
+
+    $inputPath = sys_get_temp_dir() . '\\' . $filename;
+    $outputFile = sys_get_temp_dir() . '\\converted_' . uniqid() . '.' . $format;
+
+    // ⚠️ Chemin FFmpeg
+    $ffmpeg = "C:\\ffmpeg\\bin\\ffmpeg.exe";
+
+    // Commande conversion
+    $cmd = sprintf(
+        '%s -i %s -c:v libx264 -c:a aac %s 2>&1',
+        escapeshellarg($ffmpeg),
+        escapeshellarg($inputPath),
+        escapeshellarg($outputFile)
+    );
+
+    exec($cmd, $output, $returnVar);
+
+    if ($returnVar !== 0 || !file_exists($outputFile)) {
+        return new Response("Erreur conversion vidéo:\n" . implode("\n", $output), 500);
+    }
+
+    return $this->file($outputFile, 'video.' . $format);
+}
+
             return new Response("Type de fichier non supporté", 400);
         }
 
