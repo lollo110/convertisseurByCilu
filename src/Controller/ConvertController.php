@@ -27,66 +27,93 @@ class ConvertController extends AbstractController
             // 🖼️ IMAGES
             // ------------------------
             $imageMimes = ['image/jpeg', 'image/png', 'image/webp'];
+            $pdfMimes = ['application/pdf'];
+            $wordMimes = [
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ];
+            $videoMimes = [
+                'video/mp4',
+                'video/x-msvideo', // avi
+                'video/quicktime', // mov
+                'video/x-matroska', // mkv
+                'video/webm'
+            ];
 
+            // ------------------------
+            // IMAGE → IMAGE / PDF
+            // ------------------------
             if (in_array($mime, $imageMimes)) {
-                $image = null;
 
-                if ($mime === 'image/jpeg')
-                    $image = imagecreatefromjpeg($originalPath);
-                if ($mime === 'image/png')
-                    $image = imagecreatefrompng($originalPath);
-                if ($mime === 'image/webp')
-                    $image = imagecreatefromwebp($originalPath);
+                if ($format === 'pdf') {
+                    // IMAGE → PDF
+                    $imagick = new \Imagick();
+                    $imagick->readImage($originalPath);
+                    $imagick->setImageFormat('pdf');
+                    $tempFile = sys_get_temp_dir() . '\\converted_' . uniqid() . '.pdf';
+                    $imagick->writeImage($tempFile);
+                    $imagick->clear();
+                    $imagick->destroy();
+                    return $this->file($tempFile, 'converted.pdf');
+                } else {
+                    // IMAGE → IMAGE
+                    $image = null;
+                    if ($mime === 'image/jpeg') $image = imagecreatefromjpeg($originalPath);
+                    if ($mime === 'image/png') $image = imagecreatefrompng($originalPath);
+                    if ($mime === 'image/webp') $image = imagecreatefromwebp($originalPath);
 
-                if (!$image) {
-                    return new Response("Erreur lecture image", 400);
+                    if (!$image) return new Response("Erreur lecture image", 400);
+
+                    $tempFile = sys_get_temp_dir() . '\\converted_' . uniqid() . '.' . $format;
+
+                    switch ($format) {
+                        case 'png': imagepng($image, $tempFile); break;
+                        case 'jpg': imagejpeg($image, $tempFile); break;
+                        case 'webp': imagewebp($image, $tempFile); break;
+                        default: return new Response("Format image invalide", 400);
+                    }
+
+                    imagedestroy($image);
+                    return $this->file($tempFile, 'converted.' . $format);
                 }
+            }
+
+            // ------------------------
+            // PDF → IMAGE
+            // ------------------------
+            if (in_array($mime, $pdfMimes)) {
+
+                if (!in_array($format, ['png','jpg','webp'])) {
+                    return new Response("Format image invalide pour PDF", 400);
+                }
+
+                $imagick = new \Imagick();
+                $imagick->readImage($originalPath);
+                $imagick->setImageFormat($format);
 
                 $tempFile = sys_get_temp_dir() . '\\converted_' . uniqid() . '.' . $format;
-
-                switch ($format) {
-                    case 'png':
-                        imagepng($image, $tempFile);
-                        break;
-                    case 'jpg':
-                        imagejpeg($image, $tempFile);
-                        break;
-                    case 'webp':
-                        imagewebp($image, $tempFile);
-                        break;
-                    default:
-                        return new Response("Format image invalide", 400);
-                }
-
-                imagedestroy($image);
+                $imagick->writeImage($tempFile);
+                $imagick->clear();
+                $imagick->destroy();
 
                 return $this->file($tempFile, 'converted.' . $format);
             }
 
             // ------------------------
-// 📄 WORD -> PDF (FIABLE)
-// ------------------------
-
-            $wordMimes = [
-                'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-            ];
-
+            // WORD → PDF
+            // ------------------------
             if (in_array($mime, $wordMimes)) {
 
                 if ($format !== 'pdf') {
                     return new Response("Seule conversion Word → PDF autorisée", 400);
                 }
 
-                // ✅ Sauvegarder avec vraie extension
                 $extension = $file->getClientOriginalExtension(); // doc ou docx
                 $filename = uniqid() . '.' . $extension;
                 $file->move(sys_get_temp_dir(), $filename);
 
                 $inputPath = sys_get_temp_dir() . '\\' . $filename;
                 $outputDir = sys_get_temp_dir();
-
-                // ⚠️ Chemin LibreOffice
                 $soffice = "C:\\Program Files\\LibreOffice\\program\\soffice.exe";
 
                 $cmd = sprintf(
@@ -99,11 +126,10 @@ class ConvertController extends AbstractController
                 exec($cmd, $output, $returnVar);
 
                 if ($returnVar !== 0) {
-                    return new Response("Erreur conversion:\n" . implode("\n", $output), 500);
+                    return new Response("Erreur conversion Word:\n" . implode("\n", $output), 500);
                 }
 
                 $outputFile = $outputDir . '\\' . pathinfo($filename, PATHINFO_FILENAME) . '.pdf';
-
                 if (!file_exists($outputFile)) {
                     return new Response("Fichier PDF non généré", 500);
                 }
@@ -112,50 +138,38 @@ class ConvertController extends AbstractController
             }
 
             // ------------------------
-// 🎬 VIDEO -> VIDEO
-// ------------------------
+            // VIDEO → VIDEO
+            // ------------------------
+            if (in_array($mime, $videoMimes)) {
 
-$videoMimes = [
-    'video/mp4',
-    'video/x-msvideo', // avi
-    'video/quicktime', // mov
-    'video/x-matroska', // mkv
-    'video/webm'
-];
+                if (!in_array($format, ['mp4', 'avi', 'mkv', 'webm'])) {
+                    return new Response("Format vidéo invalide", 400);
+                }
 
-if (in_array($mime, $videoMimes)) {
+                $extension = $file->getClientOriginalExtension();
+                $filename = uniqid() . '.' . $extension;
+                $file->move(sys_get_temp_dir(), $filename);
 
-    if (!in_array($format, ['mp4', 'avi', 'mkv', 'webm'])) {
-        return new Response("Format vidéo invalide", 400);
-    }
+                $inputPath = sys_get_temp_dir() . '\\' . $filename;
+                $outputFile = sys_get_temp_dir() . '\\converted_' . uniqid() . '.' . $format;
 
-    // Sauvegarder avec extension
-    $extension = $file->getClientOriginalExtension();
-    $filename = uniqid() . '.' . $extension;
-    $file->move(sys_get_temp_dir(), $filename);
+                $ffmpeg = "C:\\ffmpeg\\bin\\ffmpeg.exe";
 
-    $inputPath = sys_get_temp_dir() . '\\' . $filename;
-    $outputFile = sys_get_temp_dir() . '\\converted_' . uniqid() . '.' . $format;
+                $cmd = sprintf(
+                    '%s -i %s -c:v libx264 -c:a aac %s 2>&1',
+                    escapeshellarg($ffmpeg),
+                    escapeshellarg($inputPath),
+                    escapeshellarg($outputFile)
+                );
 
-    // ⚠️ Chemin FFmpeg
-    $ffmpeg = "C:\\ffmpeg\\bin\\ffmpeg.exe";
+                exec($cmd, $output, $returnVar);
 
-    // Commande conversion
-    $cmd = sprintf(
-        '%s -i %s -c:v libx264 -c:a aac %s 2>&1',
-        escapeshellarg($ffmpeg),
-        escapeshellarg($inputPath),
-        escapeshellarg($outputFile)
-    );
+                if ($returnVar !== 0 || !file_exists($outputFile)) {
+                    return new Response("Erreur conversion vidéo:\n" . implode("\n", $output), 500);
+                }
 
-    exec($cmd, $output, $returnVar);
-
-    if ($returnVar !== 0 || !file_exists($outputFile)) {
-        return new Response("Erreur conversion vidéo:\n" . implode("\n", $output), 500);
-    }
-
-    return $this->file($outputFile, 'video.' . $format);
-}
+                return $this->file($outputFile, 'video.' . $format);
+            }
 
             return new Response("Type de fichier non supporté", 400);
         }
