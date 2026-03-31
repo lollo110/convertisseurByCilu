@@ -1,176 +1,318 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Convertisseur de fichiers
-{% endblock %}
+{% block title %}Convertisseur de fichiers gratuit en ligne – PDF, Image, Vidéo{% endblock %}
 
 {% block body %}
+<div class="layout">
+<div class="pub">
+</div>
 <div class="container">
-	<h1>Convertisseur de fichiers</h1>
 
-	<form method="post" enctype="multipart/form-data" data-turbo="false" id="convertForm">
-		<div id="dropZone" style="border: 2px dashed #ccc; padding: 20px; text-align: center;">
-			Glissez votre fichier ici ou cliquez pour sélectionner
-			<input type="file" name="file" id="fileInput" style="display:none" required>
-		</div>
+    <h1>Convertisseur de fichiers ByCilu</h1>
+    <p id="instruction">Choisissez une conversion ou importez un fichier</p>
 
-		<div id="preview" style="margin-top:10px;"></div>
+    <!-- DROPZONE -->
+    <div id="dropZone">
+        <div class="drop-content">
+            <p>📁 Déposez votre fichier</p>
+            <span>ou cliquez pour sélectionner</span>
+        </div>
+        <input type="file" id="fileInput" hidden>
+    </div>
 
-		<select name="format" required>
-			<option value="pdf">image to PDF</option>
-			<option value="png">image to PNG</option>
-			<option value="jpg">image to JPG</option>
-			<option value="webp">image to WEBP</option>
-			<option value="pdf">Word to PDF</option>
-			<option value="mp4">video to MP4</option>
-			<option value="avi">video to AVI</option>
-			<option value="mkv">video to MKV</option>
-			<option value="png">PDF to PNG</option>
-			<option value="jpg">PDF to JPG</option>
-			<option value="webp">PDF to WEBP</option>
-		</select>
+    <!-- PREVIEW -->
+    <div id="preview"></div>
 
-		<button type="submit">Convertir</button>
-		<div id="error" style="color:red; margin-top:10px;"></div>
-	</form>
+    <!-- CONVERSIONS -->
+    <div id="conversionTypes">
+        <button data-type="image" data-format="pdf">🖼️ → PDF</button>
+        <button data-type="image" data-format="png">🖼️ → PNG</button>
+        <button data-type="image" data-format="jpg">🖼️ → JPG</button>
+
+        <button data-type="pdf" data-format="png">📄 → PNG</button>
+        <button data-type="pdf" data-format="jpg">📄 → JPG</button>
+
+        <button data-type="word" data-format="pdf">📝 → PDF</button>
+
+        <button data-type="video" data-format="mp4">🎬 → MP4</button>
+        <button data-type="video" data-format="avi">🎬 → AVI</button>
+    </div>
+
+    <!-- ACTION -->
+    <button id="convertBtn" disabled>Convertir</button>
+
+    <!-- PROGRESS -->
+    <div id="progressContainer">
+        <div id="progressBar"></div>
+    </div>
+
+    <!-- ERROR -->
+    <div id="error"></div>
+
 </div>
 
-	<script>
-		const dropZone = document.getElementById('dropZone');
+<div class="seo-description" style="margin-bottom:20px;">
+		<h2>Convertisseur de fichiers en ligne gratuit</h2>
+
+<p>
+Notre outil permet de convertir facilement vos fichiers image, PDF, Word et vidéo.
+Aucune installation nécessaire, tout fonctionne directement dans votre navigateur.
+</p>
+
+<h3>Formats supportés</h3>
+<ul>
+    <li>Image vers PDF, JPG, PNG, WEBP</li>
+    <li>PDF vers image</li>
+    <li>Word vers PDF</li>
+    <li>Vidéo vers MP4, AVI</li>
+</ul>
+
+<h3>Pourquoi utiliser notre convertisseur</h3>
+<ul>
+    <li>✔ Gratuit</li>
+    <li>✔ Rapide</li>
+    <li>✔ Sans inscription</li>
+</ul>
+</div>
+</div>
+
+
+<script>
+// --------------------
+// ELEMENTS
+// --------------------
+const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const preview = document.getElementById('preview');
+const buttons = document.querySelectorAll('#conversionTypes button');
+const convertBtn = document.getElementById('convertBtn');
 const errorDiv = document.getElementById('error');
-const formatSelect = document.querySelector('select[name="format"]');
+const progressContainer = document.getElementById('progressContainer');
+const progressBar = document.getElementById('progressBar');
+const instruction = document.getElementById('instruction');
 
-const MAX_SIZE_MB = 500;
+// --------------------
+// STATE
+// --------------------
+let currentFile = null;
+let selectedFormat = null;
 
-const formats = {
-'image/jpeg': [
-'png', 'jpg', 'webp', 'pdf'
-],
-'image/png': [
-'png', 'jpg', 'webp', 'pdf'
-],
-'image/webp': [
-'png', 'jpg', 'webp', 'pdf'
-],
-'application/pdf': [
-'png', 'jpg', 'webp'
-],
-'application/msword': ['pdf'],
-'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['pdf'],
-'video/mp4': [
-'mp4', 'avi', 'mkv', 'webm'
-],
-'video/x-msvideo': [
-'mp4', 'avi', 'mkv', 'webm'
-],
-'video/quicktime': [
-'mp4', 'avi', 'mkv', 'webm'
-],
-'video/x-matroska': [
-'mp4', 'avi', 'mkv', 'webm'
-],
-'video/webm': ['mp4', 'avi', 'mkv', 'webm']
+// --------------------
+// DETECT TYPE
+// --------------------
+function detectType(mime) {
+    if (mime.startsWith('image/')) return 'image';
+    if (mime === 'application/pdf') return 'pdf';
+    if (mime.includes('word')) return 'word';
+    if (mime.startsWith('video/')) return 'video';
+    return null;
+}
+
+// --------------------
+// INITIAL STATE
+// --------------------
+function resetButtons() {
+    buttons.forEach(btn => {
+        btn.classList.remove('disabled');
+        btn.classList.remove('active');
+    });
+}
+
+// --------------------
+// BUTTON CLICK
+// --------------------
+buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+
+        if (btn.classList.contains('disabled')) return;
+
+        buttons.forEach(b => b.classList.remove('active'));
+
+        btn.classList.add('active');
+        selectedFormat = btn.dataset.format;
+
+        if (currentFile) {
+            convertBtn.disabled = false;
+        }
+    });
+});
+
+// --------------------
+// DROPZONE EVENTS
+// --------------------
+dropZone.onclick = () => fileInput.click();
+
+dropZone.ondragover = e => {
+    e.preventDefault();
+    dropZone.classList.add('drag');
 };
 
-dropZone.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('dragover', e => {
-e.preventDefault();
-dropZone.style.borderColor = '#333';
-});
-dropZone.addEventListener('dragleave', e => {
-e.preventDefault();
-dropZone.style.borderColor = '#ccc';
-});
-dropZone.addEventListener('drop', e => {
-e.preventDefault();
-dropZone.style.borderColor = '#ccc';
-handleFile(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+dropZone.ondragleave = () => {
+    dropZone.classList.remove('drag');
+};
 
+dropZone.ondrop = e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag');
+    handleFile(e.dataTransfer.files[0]);
+};
+
+fileInput.onchange = e => handleFile(e.target.files[0]);
+
+// --------------------
+// HANDLE FILE
+// --------------------
 function handleFile(file) {
-errorDiv.textContent = '';
-preview.innerHTML = '';
+    errorDiv.textContent = '';
+    preview.innerHTML = '';
+    convertBtn.disabled = true;
+    selectedFormat = null;
 
-if (! file) 
-return;
+    if (!file) return;
 
+    const type = detectType(file.type);
 
-if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-errorDiv.textContent = `Fichier trop gros. Max ${MAX_SIZE_MB} Mo.`;
-fileInput.value = '';
-return;
+    if (!type) {
+        errorDiv.textContent = "Type de fichier non supporté";
+        return;
+    }
+
+    currentFile = file;
+
+    // PREVIEW
+    // PREVIEW WRAPPER
+const wrapper = document.createElement('div');
+wrapper.className = "preview-wrapper";
+
+// FILE NAME
+const name = document.createElement('p');
+name.textContent = file.name;
+
+// REMOVE BUTTON
+const removeBtn = document.createElement('button');
+removeBtn.textContent = "×";
+removeBtn.className = "remove-file";
+
+removeBtn.onclick = () => {
+    resetUI();
+};
+
+// APPEND
+wrapper.appendChild(removeBtn);
+wrapper.appendChild(name);
+
+// IMAGE PREVIEW
+if (type === 'image') {
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    img.style.maxWidth = "200px";
+    wrapper.appendChild(img);
 }
 
-const supportedTypes = Object.keys(formats);
-if (! supportedTypes.includes(file.type)) {
-errorDiv.textContent = 'Format non supporté. Images, PDF, Word, Vidéos autorisés.';
-fileInput.value = '';
-return;
+preview.appendChild(wrapper);
+
+    // FILTRER BOUTONS
+    buttons.forEach(btn => {
+        if (btn.dataset.type === type) {
+            btn.classList.remove('disabled');
+        } else {
+            btn.classList.add('disabled');
+            btn.classList.remove('active');
+        }
+    });
+
+    // TEXTE UX
+    if (instruction) {
+        instruction.textContent = `Fichier détecté (${type.toUpperCase()}) - choisissez le format`;
+    }
 }
 
-// Aggiorna select dei formati disponibili
-formatSelect.innerHTML = '';
-formats[file.type].forEach(fmt => {
-let label = fmt.toUpperCase();
-if (file.type.startsWith('image/')) {
-if (fmt === 'pdf') 
-label = 'Image → PDF';
- else 
-label = `Image → ${label}`;
+// --------------------
+// SUBMIT (AJAX)
+// --------------------
+convertBtn.addEventListener('click', () => {
 
-}
-if (file.type === 'application/pdf') 
-label = `PDF → ${label}`;
+    if (!currentFile || !selectedFormat) return;
 
-if (file.type.startsWith('video/')) 
-label = `Video → ${label}`;
+    const formData = new FormData();
+    formData.append('file', currentFile);
+    formData.append('format', selectedFormat);
 
-if (file.type.includes('wordprocessingml.document') || file.type === 'application/msword') 
-label = `Word → PDF`;
+    const xhr = new XMLHttpRequest();
 
-const option = document.createElement('option');
-option.value = fmt;
-option.textContent = label;
-formatSelect.appendChild(option);
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '0%';
+
+    convertBtn.disabled = true;
+    convertBtn.textContent = "Conversion...";
+
+    // PROGRESS
+    xhr.upload.onprogress = e => {
+        if (e.lengthComputable) {
+            const percent = (e.loaded / e.total) * 100;
+            progressBar.style.width = percent + '%';
+        }
+    };
+
+    // SUCCESS
+    xhr.onload = () => {
+        if (xhr.status === 200) {
+            const blob = xhr.response;
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "converted";
+            a.click();
+
+            resetUI();
+        } else {
+            errorDiv.textContent = "Erreur conversion";
+            convertBtn.disabled = false;
+            convertBtn.textContent = "Convertir";
+        }
+    };
+
+    // ERROR
+    xhr.onerror = () => {
+        errorDiv.textContent = "Erreur réseau";
+        convertBtn.disabled = false;
+        convertBtn.textContent = "Convertir";
+    };
+
+    xhr.open('POST', '/');
+    xhr.responseType = 'blob';
+    xhr.send(formData);
 });
 
-// Anteprima
-const fileNameDiv = document.createElement('div');
-fileNameDiv.textContent = `Fichier : ${
-file.name
-}`;
-fileNameDiv.style.marginTop = '5px';
+// --------------------
+// RESET UI
+// --------------------
+function resetUI() {
+    currentFile = null;
+    selectedFormat = null;
 
-const imageTypes = ['image/jpeg', 'image/png', 'image/webp'];
-const videoTypes = [
-'video/mp4',
-'video/x-msvideo',
-'video/quicktime',
-'video/x-matroska',
-'video/webm'
-];
+    fileInput.value = '';
+    preview.innerHTML = '';
+    errorDiv.textContent = '';
 
-if (imageTypes.includes(file.type)) {
-const img = document.createElement('img');
-img.src = URL.createObjectURL(file);
-img.style.maxWidth = '200px';
-img.style.maxHeight = '200px';
-preview.appendChild(img);
-preview.appendChild(fileNameDiv);
-} else {
-preview.appendChild(fileNameDiv);
+    resetButtons();
+
+    convertBtn.disabled = true;
+    convertBtn.textContent = "Convertir";
+
+    progressBar.style.width = '0%';
+
+    if (instruction) {
+        instruction.textContent = "Choisissez une conversion";
+    }
+
+    setTimeout(() => {
+        progressContainer.style.display = 'none';
+    }, 500);
 }
+</script>
 
-if (videoTypes.includes(file.type)) {
-errorDiv.textContent = 'Vidéo détectée ✔';
-}
-
-// Metti il file nell'input
-const dataTransfer = new DataTransfer();
-dataTransfer.items.add(file);
-fileInput.files = dataTransfer.files;
-}
-	</script>
 {% endblock %}
+
+
